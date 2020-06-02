@@ -1,0 +1,55 @@
+{% extends 'base_template.html' %}
+
+
+{% block navigation%}
+
+<div id="navbar" class="navbar-collapse collapse">
+    <form class="navbar-form navbar-right" action = "/home" method = "POST">
+      <div class="form-group">
+        <input type="text" placeholder="Username" class="form-control" name = "user" id = "user">
+      </div>
+      <div class="form-group">
+        <input type="password" placeholder="Password" class="form-control" name = "password" id = "password">
+      </div>
+      <button type="submit" class="btn btn-success">Sign in</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block body%}
+
+<div class="jumbotron">
+    <div class="container">
+      <h2>Welcome to the Intent Recognition System!</h2>
+      <br>
+      <p>This is the Intent Recognition System for live dialogs settings. Simply log in to start recording and retrieving intents in your dialogs. If you want to learn more, click below to find out more about the mechanisms and techniques.</p>
+      <p><a class="btn btn-primary btn-lg" href="#" role="button">Learn more &raquo;</a></p>
+    </div>
+</div>
+
+</form>
+
+<div>
+    <table>
+        <tr>
+            <th> Task </th>
+            <th> Added </th>
+            <th> Actions </th>
+        </tr>
+        {% for task in tasks %}
+        <tr> 
+                <td> {{ task.content }}</td>
+                <td> {{ task.date_created }}</td>
+                <td> 
+                    <a href = "" > Delete </a> 
+                    <br>
+                    <a href = "" > Update </a>
+                </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+{% endblock%}

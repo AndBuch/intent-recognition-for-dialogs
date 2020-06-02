@@ -1,0 +1,31 @@
+{% extends 'base_template.html' %}
+
+{% block navigation%} 
+<div id="navbar" class="navbar-collapse collapse">
+    <form class="navbar-form navbar-right" action = "/portallogout">
+      <button type="submit" class="btn btn-success">Log out</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block body %}
+
+<div class="container-fluid">
+  <div class="row" style = "height: 100vh; margin-top: 10px;">
+    <div class="col-sm-3 col-md-2 sidebar" style="background-color: rgb(237, 237, 237); height: 100vh">
+      <ul class="nav nav-sidebar" style = "margin-top: 10px;">
+        <li><a href="/portal_record">Dialog Recorder</a></li>
+        <li><a href="/portal_dialog">Dialog Player</a></li>
+        <li><a href="/portal_statistics">Statistics</a></li>
+        <li><a href="/portal_check" style = "background-color: rgb(30, 156, 230); color: white">Intent & Transcription Checker</a></li>
+      </ul>
+    </div>
+
+    <div class="col-md col-md-offset-2 main" style = "margin-top: 30px;">
+      <h1 class="page-header" style = "margin-left: 20px;">Intent & Transcription Checker</h1>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
