@@ -5,8 +5,18 @@ import wave
 from flask_socketio import emit, SocketIO
 
 from datetime import datetime
-import database_custom
+
 import os
+
+# For multithreading
+from threading import Thread
+
+# For audio
+import speech_recognition as sr
+
+#custom python files
+import database_custom
+import audio_transcription
 
 
 # Set this variable to "threading", "eventlet" or "gevent" to test the
@@ -227,7 +237,6 @@ def portallogout():
     return redirect(url_for('home'))
 
 
-
 '''
 ----------------------------------------------------------------------------------
 AUDIO-Recorder
@@ -239,17 +248,37 @@ def start_recording(options):
     
     """Start recording audio from the client."""
     
-    # Create new audio file in folder /audio
+    # Create two new audio files in folder /audio, i.e the audio file and its chunks
     id = uuid.uuid4().hex  # server-side filename
     session['wavename'] = id + '.wav'
-    audio_path = dir_path + '/audio/' + session['wavename']
-    wf = wave.open(audio_path, 'wb')
+    session['audiopath'] = dir_path + '/audio/' + session['wavename']
+    session['chunkspath'] = dir_path + '/audio/' + id + '_chunks.wav'
+    audio_write = wave.open(session['audiopath'], 'wb')
+    audio_chunks = wave.open(session['chunkspath'], 'wb')
+    
+    # Set audio configuration
+    session['channels'] = options.get('numChannels', 1)
+    session['samplewidth'] = options.get('bps', 16) // 8
+    session['framerate'] = options.get('fps', 44100)
 
-    # Create new audio format
-    wf.setnchannels(options.get('numChannels', 1))
-    wf.setsampwidth(options.get('bps', 16) // 8)
-    wf.setframerate(options.get('fps', 44100))
-    session['wavefile'] = wf
+    # Implement configuration for audio files
+    audio_write.setnchannels(session['channels'])
+    audio_write.setsampwidth(session['samplewidth'])
+    audio_write.setframerate(session['framerate'])
+    session['wavefile'] = audio_write
+
+    audio_chunks.setnchannels(session['channels'])
+    audio_chunks.setsampwidth(session['samplewidth'])
+    audio_chunks.setframerate(session['framerate'])
+    session['chunksfile'] = audio_chunks
+
+    # Start transcription as long as session['transcripe'] = True
+    transcription = audio_transcription.Transcription(True)
+    session['transcription'] = transcription
+    session['transcription'].transcribe = True
+    t1 = Thread(target = session['transcription'].transcribe_audio)
+    t1.start()
+    print('going further')
 
 
 @socketio.on('write-audio')
@@ -257,9 +286,29 @@ def write_audio(data):
 
     print("write data")
     """Write a chunk of audio from the client."""
+
+    # Extend the audio frame with the new data
     session['wavefile'].writeframes(data)
+    
+    # Write the new data to our chunks-file, close it and open it for reading
+    session['chunksfile'].writeframes(data)
+    session['chunksfile'].close()
+    
+    read_chunks = wave.open(session['chunkspath'], 'rb')
+    current_frames = read_chunks.readframes(2048)
+    read_chunks.close()
 
+    # Re-open chunks-file for future writing. For this, we have to define the writing-config again
+    audio_chunks = wave.open(session['chunkspath'], 'wb')
+    audio_chunks.setnchannels(session['channels'])
+    audio_chunks.setsampwidth(session['samplewidth'])
+    audio_chunks.setframerate(session['framerate'])
+    session['chunksfile'] = audio_chunks
 
+    # Finally, we add the new audio frames to the list of frames in our transcription class
+    session['transcription'].audio.append(current_frames)
+
+    
 @socketio.on('end-recording')
 def end_recording():
     print("end recording")
@@ -267,9 +316,19 @@ def end_recording():
     """Stop recording audio from the client."""
     emit('add-wavefile', audio_path = dir_path + '/audio/' + session['wavename'])
     session['wavefile'].close()
-    del session['wavefile']
-    del session['wavename']
 
+    # Set transcribe to "False" in order to stop the while-loop in function transcribe()
+    session['transcription'].transcribe = False
+    
+    # Free up session
+    del session['wavefile']
+    del session['chunksfile']
+    del session['wavename']
+    del session['audiopath']
+    del session['channels']
+    del session['samplewidth']
+    del session['framerate'] 
+    
 '''
 ----------------------------------------------------------------------------------
 For debugging
