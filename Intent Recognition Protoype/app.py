@@ -7,16 +7,17 @@ from flask_socketio import emit, SocketIO
 from datetime import datetime
 
 import os
+import time
 
 # For multithreading
 from threading import Thread
 
-# For audio
-import speech_recognition as sr
+# For opening the audio file
+import io
 
 #custom python files
 import database_custom
-import audio_transcription
+import audio_transcription_ibm
 
 
 # Set this variable to "threading", "eventlet" or "gevent" to test the
@@ -244,9 +245,9 @@ AUDIO-Recorder
 '''
 @socketio.on('start-recording')
 def start_recording(options):
-    print('started recording')
     
     """Start recording audio from the client."""
+    print('Recording started...')
     
     # Create two new audio files in folder /audio, i.e the audio file and its chunks
     id = uuid.uuid4().hex  # server-side filename
@@ -254,7 +255,6 @@ def start_recording(options):
     session['audiopath'] = dir_path + '/audio/' + session['wavename']
     session['chunkspath'] = dir_path + '/audio/' + id + '_chunks.wav'
     audio_write = wave.open(session['audiopath'], 'wb')
-    audio_chunks = wave.open(session['chunkspath'], 'wb')
     
     # Set audio configuration
     session['channels'] = options.get('numChannels', 1)
@@ -267,62 +267,39 @@ def start_recording(options):
     audio_write.setframerate(session['framerate'])
     session['wavefile'] = audio_write
 
-    audio_chunks.setnchannels(session['channels'])
-    audio_chunks.setsampwidth(session['samplewidth'])
-    audio_chunks.setframerate(session['framerate'])
-    session['chunksfile'] = audio_chunks
-
     # Start transcription as long as session['transcripe'] = True
-    transcription = audio_transcription.Transcription(True)
+    transcription = audio_transcription_ibm.IBM_STT()
     session['transcription'] = transcription
-    session['transcription'].transcribe = True
-    t1 = Thread(target = session['transcription'].transcribe_audio)
-    t1.start()
-    print('going further')
+    print('Started the websocket connection')
 
 
 @socketio.on('write-audio')
-def write_audio(data):
+def write_audio(audio_chunk):
 
-    print("write data")
     """Write a chunk of audio from the client."""
 
-    # Extend the audio frame with the new data
-    session['wavefile'].writeframes(data)
-    
-    # Write the new data to our chunks-file, close it and open it for reading
-    session['chunksfile'].writeframes(data)
-    session['chunksfile'].close()
-    
-    read_chunks = wave.open(session['chunkspath'], 'rb')
-    current_frames = read_chunks.readframes(2048)
-    read_chunks.close()
+    # Update the buffer of the transcription with the latest audio chunk (FIFO principle)
+    session['transcription'].UpdateBuffer(audio_chunk)
 
-    # Re-open chunks-file for future writing. For this, we have to define the writing-config again
-    audio_chunks = wave.open(session['chunkspath'], 'wb')
-    audio_chunks.setnchannels(session['channels'])
-    audio_chunks.setsampwidth(session['samplewidth'])
-    audio_chunks.setframerate(session['framerate'])
-    session['chunksfile'] = audio_chunks
-
-    # Finally, we add the new audio frames to the list of frames in our transcription class
-    session['transcription'].audio.append(current_frames)
-
+    # Extend the audio frame with the latest audio chunk
+    session['wavefile'].writeframes(audio_chunk)
     
+
 @socketio.on('end-recording')
 def end_recording():
-    print("end recording")
     
-    """Stop recording audio from the client."""
+    """Recording stopped..."""
+    print('Recording ended...')
+    
+    # End the transcription by calling StopTranscript()
+    t1, t2 = session['transcription'].StopTranscript()
+
+    # Save and close .wav-file
     emit('add-wavefile', audio_path = dir_path + '/audio/' + session['wavename'])
     session['wavefile'].close()
-
-    # Set transcribe to "False" in order to stop the while-loop in function transcribe()
-    session['transcription'].transcribe = False
     
     # Free up session
     del session['wavefile']
-    del session['chunksfile']
     del session['wavename']
     del session['audiopath']
     del session['channels']
