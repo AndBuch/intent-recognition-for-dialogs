@@ -1,6 +1,10 @@
 # For data handling
 from queue import Queue
 
+import sys
+import os
+sys.stdout = open(os.devnull, 'w')
+
 # For multithreading
 import asyncio
 
@@ -13,6 +17,7 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 
 from threading import Thread
+import re
 
 # Only for testing
 import time
@@ -33,6 +38,7 @@ class IntentRecognition(object):
         
         # BERT Tokenizer and model instance
         self.tokenizer = tokenizer
+        #self.embedding_model = SentenceTransformer('distiluse-base-multilingual-cased')
         self.model_instance = model_instance
 
         # Arguments class as passed from app.py
@@ -41,6 +47,43 @@ class IntentRecognition(object):
         # Assign the thread to the class and define the sleep_thread variable
         self.start_intent_recognition = None
         self.sleep_thread = False
+
+
+    # Clean the queries before passing them to the sentence embeddings
+    def CleanQueries(self, query):
+        
+        # Remove cetrain strings
+        query = query.lower()
+
+        # Remove chars between specific spans
+        query = re.sub("[\<\[].*?[\+\>]", "", query)
+        
+        # Remove the following characters
+        punctuations = '''!()-[]{};:"\,<>./?@#$%^&*_~+'''
+        
+        query_clean = ""
+        for char in query:
+        
+            if char not in punctuations:
+                query_clean = query_clean + char
+            
+        # Remove white spaces
+        query_clean = " ".join(query_clean.split())
+
+        return query_clean
+
+    # This function tokenizes all queries using the BERT tokenizer
+    def GetEmbeddings(self, query):
+
+        print(query)
+        
+        query_clean = self.CleanQueries(query)
+        query_clean = query
+
+        # Use the pre-loaded SBERT model to get the embeddings (512-dim)
+        query_embedding = self.embedding_model.encode([query_clean])
+
+        return query_embedding
 
 
     # This function tokenizes all queries using the BERT tokenizer
@@ -64,7 +107,9 @@ class IntentRecognition(object):
     def Main(self, transcript):
 
         tokenized_query = self.TokenizeQuery(transcript['sentence'])
-        self.model_instance.Inference(tokenized_query)
+        #embedding_query = self.GetEmbeddings(transcript['sentence'])
+
+        #self.model_instance.Inference(tokenized_query)
 
 
 

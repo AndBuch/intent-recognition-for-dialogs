@@ -98,8 +98,6 @@
             e.classList.add('recording');
             recording = true;
             console.log(recording)
-            //parseInt(audioContext.sampleRate)
-            console.log(parseInt(audioContext.sampleRate))  
             socketio.emit('start-recording', {numChannels: 1, bps: 16, fps: parseInt(audioContext.sampleRate)});
 
             // show recording status

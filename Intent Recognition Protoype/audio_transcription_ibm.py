@@ -1,20 +1,14 @@
-# For IBM Speech-to-Text
 from ibm_watson import SpeechToTextV1
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_watson.websocket import RecognizeCallback, AudioSource
 
-# For data handling
 from queue import Queue
-import json
 import configparser
-import os
-
-# For multithreading
-import threading
+import json
 from threading import Thread
-
-# For time
 import time
+
+import os
 
 
 '''
@@ -26,17 +20,9 @@ Callback-Class
 class NewRecognizeCallback(RecognizeCallback):
     def __init__(self):
         RecognizeCallback.__init__(self)
-        
-        # Save current transcripts and speakers
         self.transcript = None
-        self.transcript_queue = list()
-        self.current_speaker = None
-        self.transcript_queue_all = list()
-
-        # Save ongoing transcripts
         self.final_transcript = list()
         self.speakers = list()
-        self.speaker_ids = list()
 
     def on_transcription(self, transcript):
         # print('transcript: {}'.format(transcript))
@@ -67,6 +53,7 @@ class NewRecognizeCallback(RecognizeCallback):
         speaker_labels = data['speaker_labels']
         speakers_positions = [item['speaker'] for item in speaker_labels]
         speakers_unique = list(set(speakers_positions)) # get only the speakers
+        
 
         # Normally, the first speakers are '0', except for monologues
         if len(speakers_unique) > 1:
@@ -101,32 +88,21 @@ class NewRecognizeCallback(RecognizeCallback):
                 positions = [ i for i in range(len(speakers_positions)) if speakers_positions[i] == speaker ]
                 sentence = list()
 
-                # Sometimes, the STT-engine does not recognize any words, then catch it.
-                try:
-                    for word in positions:
-                        sentence.append(transcript[word])
-
-                except:
-                    pass
+                for word in positions:
+                    sentence.append(transcript[word])
                 
                 # Converts the list to a string
                 sentence_string = ' '
                 sentence_string = sentence_string.join(sentence)
 
                 # Save it to speakers_sentences at function-level
-                self.speakers.append({'speaker': speaker, 'sentence': sentence_string})
-                self.transcript_queue.append({'speaker': speaker, 'sentence': sentence_string})
+                speakers_sentences.append({'speaker': speaker, 'sentence': sentence})
 
                 # Print output
                 print("Speaker {0}: {1}".format(speaker, sentence_string))
 
             # Finally, add the speakers_sentences to the global list speakers
-            # self.speakers.append(speakers_sentences)
-
-            # Check if speaker_ids are already in self.num_speakers. If not, update num_speakers
-            for speaker in speakers_unique:
-                if speaker not in self.speaker_ids:
-                    self.speaker_ids.append(speaker)
+            self.speakers.append(speakers_sentences)
 
 
     def on_data(self, data):
@@ -141,19 +117,16 @@ class NewRecognizeCallback(RecognizeCallback):
             # Only write final transcripts
             if data['results'][0]['final']:
                 self.transcript = data['results'][0]['alternatives'][0]['transcript']
-                #print('Transcript: {0}'.format(self.transcript))
-                #print(data)
+                # print('Transcript: {0}'.format(self.transcript))
                     
                 # Save all final transcripts into the list final_transcript
                 self.final_transcript.append(data['results'][0]['alternatives'][0]['transcript'])
-
-                # Save the entire output to the transcript_queue_all which will be examined everytime a write-event occurs
-                self.transcript_queue_all.append(data)
             
 
     def on_close(self):
         print("Connection closed")
         pass
+
 
 
 '''
@@ -198,7 +171,6 @@ class IBM_STT(object):
             'recognize_callback': self.callback,
             'interim_results': True,
             'speaker_labels' : True,
-            'split_transcript_at_phrase_end' : True
             }
         )
 
@@ -208,41 +180,10 @@ class IBM_STT(object):
     def UpdateBuffer(self, audio_frame):
         self.buffer.put(audio_frame)
 
-    # This function updates the queue
-    def UpdateTranscriptBuffer(self, transcript_buffer):
-
-        # Check whether the transcript_queue is empty or not. If not, iterate over all transcripts and return them
-        if len(self.callback.transcript_queue) > 0:
-            
-            for transcript in self.callback.transcript_queue:
-                transcript_buffer.append(transcript)
-            
-            # Re-set transcript_queue
-            self.callback.transcript_queue = list()
-
-        return transcript_buffer
-
-
-    # This function returns the entire current transcript disregarding the speakers
-    def UpdateSpeakerBuffer(self, speaker_buffer):
-
-        # Check whether the transcript_queue is empty or not. If not, iterate over all transcripts and return them
-        if len(self.callback.transcript_queue_all) > 0:
-            
-            for data in self.callback.transcript_queue_all:
-                speaker_buffer.append(data)
-            
-            # Re-set transcript_queue
-            self.callback.transcript_queue_all = list()
-
-        return speaker_buffer
-
-
-
     # Stop the transcription by ending the recording in audio_source
     def StopTranscript(self):
         self.audio_source.completed_recording()
         self.stt_stream_thread.join()
 
-        return self.callback.final_transcript, self.callback.speakers, self.callback.speaker_ids
+        return self.callback.final_transcript, self.callback.transcript
 
